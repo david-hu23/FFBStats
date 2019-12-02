@@ -4,6 +4,7 @@ import json
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+#NOTE: This was the initial test to track matchup. It is still being developed, so it is not a full part of the application at the moment.
 
 teamDict = { #team id : team
     1: "DJ",
