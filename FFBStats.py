@@ -6,69 +6,89 @@ import AllTimeStandings
 from AllTimeStandings import figureOptions
 from functools import partial
 
-def on_click_AllTime(cachedJSON, figureOption):
-    """ Command to execute when a button related to All Time stats is clicked. """
-    if AllTimeStandings.main(cachedJSON, figureOption) is False:
-        messagebox.showerror('Unable to retrieve full league history', 'One or more requests to ESPN failed. Verify you have a stable internet connection.')
-
-def on_click_clearCacheButton(*cachedJSON):
-    """ Clears any cached data from previous requests. Will force new requests to be triggered
-        the next time we try to create any graphs.
-    """
-    for cachedList in cachedJSON:
-        cachedList.clear()
-
-def main():
+def start_application():
     """ Creates main window for the user to interact with.
     """
-    cachedJSON = list()   
-    #Main Window
-    window = Tk()
+    application_window = generate_window()
+    application_window.mainloop()
+
+def generate_window():
+    window = ApplicationWindow()
     window.geometry('1000x700')
     window.title('Fumbled From Birth')
     Grid.rowconfigure(window, 0, weight=1)
     Grid.columnconfigure(window, 0, weight=1)
+    return window
 
-    #Frame
-    frame = Frame(window)
-    frame.grid(row=0, column=0, sticky=N+S+E+W)
-    for x in range(2):
-        Grid.rowconfigure(frame, x, weight=1)
-    for y in range(2):
-        Grid.columnconfigure(frame, y, weight=1)
+class ApplicationWindow(Tk):
 
-    #Images
-    currentDirectory = os.path.dirname(os.path.abspath(__file__))
-    photo = PhotoImage(file=os.path.join(currentDirectory, 'icon.gif'))
-    window.iconphoto(False, photo)
+    def __init__(self):
+        super().__init__()
+        self.cached_JSON = list()
+        self.generate_frame()
+        self.set_icon()
+        self.generate_commands()
+        self.generate_buttons()
+        self.generate_advanced_options()
 
-    #All Time Record - Commands
-    allTimeRecordCommand = partial(on_click_AllTime, cachedJSON, figureOptions.get("All Time Record"))
-    allTimeRecordAdjustedCommand = partial(on_click_AllTime, cachedJSON, figureOptions.get("All Time Record - Adjusted (%)"))
-    allTimePointsCommand = partial(on_click_AllTime, cachedJSON, figureOptions.get("All Time Points"))
-    AlltimePointsAdjustedCommand = partial(on_click_AllTime, cachedJSON, figureOptions.get("All Time Points - Adjusted (Per Game)"))
+    def generate_frame(self):
+        self.layout_frame = Frame(self)
+        self.layout_frame.grid(row=0, column=0, sticky=N+S+E+W)
+        for x in range(2):
+            Grid.rowconfigure(self.layout_frame, x, weight=1)
+        for y in range(2):
+            Grid.columnconfigure(self.layout_frame, y, weight=1)
 
-    #All Time Record - Buttons
-    allTimeRecordButton = Button(frame, command=allTimeRecordCommand, text="All Time Records")
-    allTimeRecordAdjustedButton = Button(frame, command=allTimeRecordAdjustedCommand, text="All Time Record - Adjusted (%)")
-    allTimePointsButton = Button(frame, command=allTimePointsCommand, text="All Time Points")
-    allTimePointsAdjustedButton = Button(frame, command=AlltimePointsAdjustedCommand, text="All Time Points - Adjusted (Per Game)")
+    def set_icon(self):
+        photo = self.get_icon()
+        self.iconphoto(False, photo)
 
-    #Advanced Options
-    menu = Menu(window)
-    clearCacheCommand = partial(on_click_clearCacheButton, cachedJSON)
-    clearCacheItem = Menu(menu, tearoff=0)
-    clearCacheItem.add_command(label='Clear cached data', command=clearCacheCommand)
-    menu.add_cascade(label='Advanced Options', menu=clearCacheItem)
-    window.config(menu=menu)
+    def get_icon(self):
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        return PhotoImage(file=os.path.join(current_directory, 'icon.gif'))
+    
+    def generate_commands(self):
+        self.all_time_record_command = partial(on_click_all_time, self.cached_JSON, figureOptions.get("All Time Record"))
+        self.all_time_record_adjusted_command = partial(on_click_all_time, self.cached_JSON, figureOptions.get("All Time Record - Adjusted (%)"))
+        self.all_time_points_command = partial(on_click_all_time, self.cached_JSON, figureOptions.get("All Time Points"))
+        self.all_time_points_adjusted_command = partial(on_click_all_time, self.cached_JSON, figureOptions.get("All Time Points - Adjusted (Per Game)"))
 
-    #Assign buttons to grid position
-    allTimeRecordButton.grid(column=0, row=0, sticky=N+S+E+W)
-    allTimeRecordAdjustedButton.grid(column=1, row=0, sticky=N+S+E+W)
-    allTimePointsButton.grid(column=0, row=1, sticky=N+S+E+W)
-    allTimePointsAdjustedButton.grid(column=1, row=1, sticky=N+S+E+W)
+        self.clear_cache_command = partial(on_click_clear_cache_button, self.cached_JSON)
 
-    window.mainloop()
+    def generate_buttons(self):
+        self.all_time_record_button = Button(self.layout_frame, command=self.all_time_record_command, text="All Time Records")
+        self.all_time_record_adjusted_button = Button(self.layout_frame, command=self.all_time_record_adjusted_command, text="All Time Record - Adjusted (%)")
+        self.all_time_points_button = Button(self.layout_frame, command=self.all_time_points_command, text="All Time Points")
+        self.all_time_points_adjusted_button = Button(self.layout_frame, command=self.all_time_points_adjusted_command, text="All Time Points - Adjusted (Per Game)")
+    
+        self.assign_buttons_to_grid()
+
+    def assign_buttons_to_grid(self):
+        self.all_time_record_button.grid(column=0, row=0, sticky=N+S+E+W)
+        self.all_time_record_adjusted_button.grid(column=1, row=0, sticky=N+S+E+W)
+        self.all_time_points_button.grid(column=0, row=1, sticky=N+S+E+W)
+        self.all_time_points_adjusted_button.grid(column=1, row=1, sticky=N+S+E+W)
+
+    def generate_advanced_options(self):
+        self.advanced_options_menu = Menu(self)
+        self.clear_cache_item = Menu(self.advanced_options_menu, tearoff=0)
+        self.clear_cache_item.add_command(label='Clear cached data', command=self.clear_cache_command)
+        self.advanced_options_menu.add_cascade(label='Advanced Options', menu=self.clear_cache_item)
+        self.config(menu=self.advanced_options_menu)
+
+def on_click_all_time(cached_JSON, figureOption):
+    """ Command to execute when a button related to All Time stats is clicked. """
+    if AllTimeStandings.main(cached_JSON, figureOption) is False:
+        messagebox.showerror(
+            'Unable to retrieve full league history',
+            'One or more requests to ESPN failed. Verify you have a stable internet connection.')
+
+def on_click_clear_cache_button(*cached_JSON):
+    """ Clears any cached data from previous requests. Will force new requests to be triggered
+        the next time we try to create any graphs.
+    """
+    for cachedList in cached_JSON:
+        cachedList.clear()
 
 if __name__ == "__main__":
-    main()
+    start_application()

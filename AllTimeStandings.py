@@ -235,6 +235,11 @@ def identify_urls(leagueId:int, firstseasonId:int, year:int=datetime.datetime.no
         If no year is supplied, will start at the current year.
     """
     urls = list()
+    if year < firstseasonId:
+        return urls
+
+    if is_year_active(year) is False:
+        year -= 1
     while (year >= firstseasonId):
         if len(urls) < 2: #Adding this check because 2 years currently use active url
             urls.append(construct_url_current(leagueId, year))
@@ -243,22 +248,49 @@ def identify_urls(leagueId:int, firstseasonId:int, year:int=datetime.datetime.no
         year -= 1
     return urls
 
+def is_year_active(year: int) -> bool:
+    """ NFL seasons start the weekend after the first Monday of September.
+    Reference: https://en.wikipedia.org/wiki/NFL_regular_season
+    """
+    current_date = datetime.date.today()
+    if year < current_date.year:
+        return True
+
+    if current_date.month != 9:
+        if current_date.month < 9:
+            return False
+        else:
+            return True
+
+    #Check if we've reached the first Monday of September
+    current_day = current_date.day
+    if current_day < 7:
+        current_weekday = current_date.weekday() #Monday == 0
+        if current_day - current_weekday < 0:
+            return False
+    return True
+
+
 def pull_data_from_ESPN(urls:list, view:str, parsedJSON:list, cookieFile:str):
     """ Given a list of URLs and the desired view, this will request info from each URL with the given view.
         Requests are initially returned in JSON.
 
         Returned information will be stored in parsedJSON.
     """
-    requests = list()
+    responses = list()
     urlArgs = list()
     for url in urls:
         urlArgs.append(URLArgs(url, view, cookieFile))
     processPool = multiprocessing.Pool()
-    requests = processPool.map(get_ESPN_data, urlArgs)
+    try:
+        responses = processPool.map(get_ESPN_data, urlArgs)
+    except requests.exceptions.ConnectionError:
+        processPool.close()
+        return False
     processPool.close()
     processPool.join()
 
-    for request in requests:
+    for request in responses:
         if 'leagueHistory' in request.url:
             request = request.json()[0]
         else:
