@@ -2,7 +2,7 @@ from tkinter import *
 from tkinter.ttk import *
 from tkinter import messagebox
 import os
-from ESPN_FFB.AllTimeStandings import figureOptions, main
+from ESPN_FFB.AllTimeStandings import FIGURE_OPTIONS, main
 from functools import partial
 
 def start_application():
@@ -50,22 +50,22 @@ class ApplicationWindow(Tk):
         self.all_time_record_command = partial(
             on_click_all_time,
             self.cached_JSON,
-            figureOptions.get("All Time Record"))
+            FIGURE_OPTIONS.get("All Time Record"))
 
         self.all_time_record_adjusted_command = partial(
             on_click_all_time,
             self.cached_JSON,
-            figureOptions.get("All Time Record - Adjusted (%)"))
+            FIGURE_OPTIONS.get("All Time Record - Adjusted (%)"))
 
         self.all_time_points_command = partial(
             on_click_all_time,
             self.cached_JSON,
-            figureOptions.get("All Time Points"))
+            FIGURE_OPTIONS.get("All Time Points"))
 
         self.all_time_points_adjusted_command = partial(
             on_click_all_time,
             self.cached_JSON,
-            figureOptions.get("All Time Points - Adjusted (Per Game)"))
+            FIGURE_OPTIONS.get("All Time Points - Adjusted (Per Game)"))
 
         self.clear_cache_command = partial(on_click_clear_cache_button, self.cached_JSON)
 
