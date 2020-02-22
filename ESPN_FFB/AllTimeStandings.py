@@ -6,6 +6,7 @@ import treelib as tl
 import numpy as np
 import multiprocessing
 import os
+from ESPN_FFB.URLInfo import URLInfo
 
 ESPN_ID_TO_TEAM = { #ESPN's team id : team
     1: "DJ",
@@ -55,15 +56,6 @@ AXIS_LABELS = {
     2: "% of Games"
 }
 
-class URLArgs:
-    def __init__(self, url, view, cookieFile):
-        self.url = url
-        self.view = view
-
-        cookies = open(cookieFile, "r").readlines()
-        self.SWID = cookies[0].strip()
-        self.espn_s2 = cookies[1].strip()
-
 def main(parsed_json: list, figure_option, league_id: int=368182, first_season_id: int=2014) -> bool:
     """ Main function for AllTimeStandings. Given a passed in figure_option, generates that figure.
 
@@ -74,9 +66,9 @@ def main(parsed_json: list, figure_option, league_id: int=368182, first_season_i
     view = "mTeam"
     current_directory = os.path.dirname(os.path.abspath(__file__))
     cookie_file = os.path.join(current_directory, 'cookies.txt')
-    urls = identify_urls(league_id, first_season_id)
+    url_info = URLInfo(view, cookie_file, league_id, first_season_id)
     if len(parsed_json) == 0:
-        if pull_data_from_ESPN(urls, view, parsed_json, cookie_file) is False:
+        if pull_data_from_ESPN(url_info, parsed_json) is False:
             return False
 
     team_stat_tree = tl.Tree()
@@ -100,83 +92,18 @@ def main(parsed_json: list, figure_option, league_id: int=368182, first_season_i
     plt.show()
     return True
 
-def identify_urls(league_id: int, first_season_id: int, year: int=datetime.datetime.now().year) -> list:
-    """ Returns list of URLs for ESPNs fantasy football APIs.
-        Will create one URL per year, starting from the passed in year
-        until the first season of the league.
-
-        If no year is supplied, will start at the current year.
-    """
-    urls = list()
-    if year < first_season_id:
-        return urls
-
-    if is_year_active(year) is False:
-        year -= 1
-    while (year >= first_season_id):
-        if len(urls) < 2: #Adding this check because 2 years currently use active url
-            urls.append(construct_url_current(league_id, year))
-        else:
-            urls.append(construct_url_historical(league_id, year))
-        year -= 1
-    return urls
-
-def is_year_active(year: int) -> bool:
-    """ NFL seasons start the weekend after the first Monday of September.
-    Reference: https://en.wikipedia.org/wiki/NFL_regular_season
-    """
-    current_date = datetime.date.today()
-    if year < current_date.year:
-        return True
-
-    if current_date.month != 9:
-        if current_date.month < 9:
-            return False
-        else:
-            return True
-    
-    #Check if we've reached the first Monday of September
-    current_day = current_date.day
-    if current_day < 7:
-        current_weekday = current_date.weekday() #Monday == 0
-        if current_day - current_weekday < 0:
-            return False
-    return True
-
-def construct_url_current(league_id: int, seasonId: int) -> str:
-    """
-        Constructs "active" URLs for ESPN fantasy football.
-        Active URLs appear to be used for the last 2 seasons.
-    """
-    return "http://fantasy.espn.com/apis/v3/games/ffl/seasons" \
-    f"/{seasonId}/segments/0/leagues/{league_id}"
-
-def construct_url_historical(league_id: int, seasonId: int) -> str:
-    """
-        Constructs "historical" URLs for ESPN fantasy football.
-        Historical URLs appear to be used for seasons more than 2 years back.
-    """
-    return "https://fantasy.espn.com/apis/v3/games/ffl/leagueHistory" \
-        f"/{league_id}?seasonId={seasonId}"
-
-def pull_data_from_ESPN(urls: list, view: str, parsed_json: list, cookie_file: str):
+def pull_data_from_ESPN(url_info: URLInfo, parsed_json: list):
     """ Given a list of URLs and the desired view, this will request info from each URL with the given view.
         Requests are initially returned in JSON.
 
         Returned information will be stored in parsed_json.
     """
     responses = list()
-    urlArgs = list()
-    for url in urls:
-        urlArgs.append(URLArgs(url, view, cookie_file))
-    process_pool = multiprocessing.Pool()
+
     try:
-        responses = process_pool.map(get_ESPN_data, urlArgs)
+        responses = get_ESPN_data(url_info)
     except requests.exceptions.ConnectionError:
-        process_pool.close()
         return False
-    process_pool.close()
-    process_pool.join()
 
     for request in responses:
         if 'leagueHistory' in request.url:
@@ -334,12 +261,17 @@ def get_team_stat_combo_id(team: int, stat: int) -> str:
     """
     return f"{team};{STATS_IDS.get(stat)}"
 
-def get_ESPN_data(urlArgs) -> list:
-    return requests.get(
-        urlArgs.url,
-        params={"view": urlArgs.view},
-        cookies={"SWID": urlArgs.SWID,
-                 "espn_s2": urlArgs.espn_s2})
+def get_ESPN_data(url_info: URLInfo) -> list:
+    return_list = list()
+    for url in url_info.urls:
+        return_list.append(
+            requests.get(
+            url,
+            params={"view": url_info.view},
+            cookies={"SWID": url_info.SWID,
+            "espn_s2": url_info.espn_s2})
+        )
+    return return_list
 
 def tree_to_list_key_stat(tree: tl.Tree) -> list:
     """ Given a tree and it's type, returns an equivalent list.
