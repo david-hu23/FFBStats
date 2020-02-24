@@ -2,7 +2,9 @@ from tkinter import *
 from tkinter.ttk import *
 from tkinter import messagebox
 import os
-from ESPN_FFB.AllTimeStandings import FIGURE_OPTIONS, main
+from ESPN_FFB.all_time_standings import  generate_all_time_graph
+from ESPN_FFB.figure_options import FIGURE_OPTIONS
+from ESPN_FFB.league_info import LeagueInfo
 from functools import partial
 
 def start_application():
@@ -23,7 +25,7 @@ class ApplicationWindow(Tk):
 
     def __init__(self):
         super().__init__()
-        self.cached_JSON = list()
+        self.league_info = LeagueInfo()
         self.generate_frame()
         self.set_icon()
         self.generate_commands()
@@ -49,25 +51,25 @@ class ApplicationWindow(Tk):
     def generate_commands(self):
         self.all_time_record_command = partial(
             on_click_all_time,
-            self.cached_JSON,
+            self.league_info,
             FIGURE_OPTIONS.get("All Time Record"))
 
         self.all_time_record_adjusted_command = partial(
             on_click_all_time,
-            self.cached_JSON,
+            self.league_info,
             FIGURE_OPTIONS.get("All Time Record - Adjusted (%)"))
 
         self.all_time_points_command = partial(
             on_click_all_time,
-            self.cached_JSON,
+            self.league_info,
             FIGURE_OPTIONS.get("All Time Points"))
 
         self.all_time_points_adjusted_command = partial(
             on_click_all_time,
-            self.cached_JSON,
+            self.league_info,
             FIGURE_OPTIONS.get("All Time Points - Adjusted (Per Game)"))
 
-        self.clear_cache_command = partial(on_click_clear_cache_button, self.cached_JSON)
+        self.clear_cache_command = partial(on_click_clear_cache_button, self.league_info)
 
     def generate_buttons(self):
         self.all_time_record_button = Button(
@@ -111,15 +113,15 @@ class ApplicationWindow(Tk):
 
         self.config(menu=self.advanced_options_menu)
 
-def on_click_all_time(cached_JSON, figureOption):
+def on_click_all_time(league_info: LeagueInfo, figure_option: int):
     """ Command to execute when a button related to All Time stats is clicked. """
-    if main(cached_JSON, figureOption) is False:
+    if generate_all_time_graph(league_info, figure_option) is False:
         messagebox.showerror(
             'Unable to retrieve full league history',
             'One or more requests to ESPN failed. Verify you have a stable internet connection.')
 
-def on_click_clear_cache_button(cached_JSON):
+def on_click_clear_cache_button(league_info: LeagueInfo):
     """ Clears any cached data from previous requests. Will force new requests to be triggered
         the next time we try to create any graphs.
     """
-    cached_JSON.clear()
+    league_info.clear_cache()

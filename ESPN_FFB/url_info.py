@@ -1,17 +1,21 @@
 import datetime
+import os
 from sys import exc_info
+from ESPN_FFB.league_info import LeagueInfo
 
 class URLInfo:
 
-    def __init__(self, view: str, cookie_file: str, league_id: int, first_season_id: int):
-        self.urls = self.get_urls(league_id, first_season_id)
+    def __init__(self, view: str, league_info: LeagueInfo):
+        self.urls = self.get_urls(league_info)
         self.view = view
 
-        cookies = self.get_cookies(cookie_file)
+        cookies = self.get_cookies()
         self.SWID = cookies[0].strip()
         self.espn_s2 = cookies[1].strip()
 
-    def get_cookies(self, cookie_file: str) -> list:
+    def get_cookies(self) -> list:
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        cookie_file = os.path.join(current_directory, 'cookies.txt')
         try:
             open_cookie_file = open(cookie_file, "r")
             cookies = open_cookie_file.readlines()
@@ -21,7 +25,7 @@ class URLInfo:
             print(exc_info()[0])
         return cookies
 
-    def get_urls(self, league_id, first_season_id, year: int=datetime.datetime.now().year) -> list:
+    def get_urls(self, league_info: LeagueInfo, year: int = datetime.datetime.now().year) -> list:
         """ Returns list of URLs for ESPNs fantasy football APIs.
         Will create one URL per year, starting from the passed in year
         until the first season of the league.
@@ -29,16 +33,16 @@ class URLInfo:
         If no year is supplied, will start at the current year.
         """
         urls = list()
-        if year < first_season_id:
+        if year < league_info.first_year:
             return urls
 
         if self.is_year_active(year) is False:
             year -= 1
-        while year >= first_season_id:
+        while year >= league_info.first_year:
             if len(urls) < 2: #Adding this check because 2 years currently use active url
-                urls.append(self.construct_url_current(league_id, year))
+                urls.append(self.construct_url_current(league_info.league_id, year))
             else:
-                urls.append(self.construct_url_historical(league_id, year))
+                urls.append(self.construct_url_historical(league_info.league_id, year))
             year -= 1
         return urls
 

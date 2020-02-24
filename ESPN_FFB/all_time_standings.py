@@ -1,62 +1,32 @@
 import requests
-import json
 import matplotlib.pyplot as plt
-import datetime
 import treelib as tl
 import numpy as np
 import multiprocessing
-import os
-from ESPN_FFB.URLInfo import URLInfo
+from ESPN_FFB.url_info import URLInfo
+from ESPN_FFB.constants import *
+from ESPN_FFB.figure_options import *
+from ESPN_FFB.league_info import LeagueInfo
 
-ESPN_ID_TO_TEAM = { #ESPN's team id : team
-    1: "DJ",
-    2: "Nick",
-    3: "Tim",
-    4: "Joe",
-    5: "Davey",
-    6: "Jason",
-    7: "Ben",
-    8: "Drew",
-    9: "Luke",
-    10: "Jack",
-    11: "Tony",
-    12: "Dano"
-}
+class AxesLabels():
 
-FIGURE_OPTIONS = {
-    "All Time Record": 0,
-    "All Time Record - Adjusted (%)": 1,
-    "All Time Points": 2,
-    "All Time Points - Adjusted (Per Game)": 3,
-    0: "All Time Record",
-    1: "All Time Record - Adjusted (%)",
-    2: "All Time Points",
-    3: "All Time Points - Adjusted (Per Game)"
-}
+    def __init__(self):
+        self.x_labels = None
+        self.y_label = None
 
-STATS_TAGS = {
-    0: "Wins",
-    1: "Losses",
-    2: "Ties",
-    3: "Points For",
-    4: "Points Against"
-}
+    def set_all_time_record_labels(self, figure_option: int):
+        self.x_labels = [STATS_TAGS.get(0), STATS_TAGS.get(1), STATS_TAGS.get(2)]
 
-STATS_IDS = {
-    0: "wins",
-    1: "losses",
-    2: "ties",
-    3: "pointsFor",
-    4: "pointsAgainst"
-}
+        if is_adjusted_figure_option(figure_option):
+            self.y_label = AXES_LABELS.get(2)
+        else:
+            self.y_label = AXES_LABELS.get(0)
 
-AXIS_LABELS = {
-    0: "Games",
-    1: "Points",
-    2: "% of Games"
-}
+    def set_all_time_point_labels(self, figure_option: int):
+        self.x_labels = [STATS_TAGS.get(3), STATS_TAGS.get(4)]
+        self.y_label = AXES_LABELS.get(1)
 
-def main(parsed_json: list, figure_option, league_id: int=368182, first_season_id: int=2014) -> bool:
+def generate_all_time_graph(league_info: LeagueInfo, figure_option: int) -> bool:
     """ Main function for AllTimeStandings. Given a passed in figure_option, generates that figure.
 
         If parsed_json is populated, this is assumed to be cached off data from a previous request
@@ -64,31 +34,18 @@ def main(parsed_json: list, figure_option, league_id: int=368182, first_season_i
         will be sent to ESPN and parsed results will be stored.
     """
     view = "mTeam"
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    cookie_file = os.path.join(current_directory, 'cookies.txt')
-    url_info = URLInfo(view, cookie_file, league_id, first_season_id)
-    if len(parsed_json) == 0:
-        if pull_data_from_ESPN(url_info, parsed_json) is False:
+    url_info = URLInfo(view, league_info)
+    if league_info.is_cache_empty():
+        if pull_data_from_ESPN(url_info, league_info.cached_json) is False:
             return False
 
-    team_stat_tree = tl.Tree()
-    initialize_tree(team_stat_tree)
-    translate_parsed_json_to_tree(parsed_json, team_stat_tree)
+    team_stat_tree = format_response_as_tree(league_info)
 
-    if is_all_time_record_figure(figure_option) is True:
-        x_labels = [STATS_TAGS.get(0), STATS_TAGS.get(1), STATS_TAGS.get(2)]
-        if figure_option == FIGURE_OPTIONS.get("All Time Record - Adjusted (%)"):
-            y_label = AXIS_LABELS.get(2)
-            tree_adjusted_for_seasons(team_stat_tree)
-        else:
-            y_label = AXIS_LABELS.get(0)
-    elif is_all_time_point_figure(figure_option) is True:
-        y_label = AXIS_LABELS.get(1)
-        x_labels = [STATS_TAGS.get(3), STATS_TAGS.get(4)]
-        if figure_option == FIGURE_OPTIONS.get("All Time Points - Adjusted (Per Game)"):
-            tree_adjusted_for_seasons(team_stat_tree)
+    axes_labels = get_axes_labels(figure_option)
+    if is_adjusted_figure_option(figure_option):
+        adjust_tree_for_seasons(team_stat_tree)
 
-    prepare_figure(figure_option, team_stat_tree, x_labels, y_label)
+    prepare_figure(figure_option, team_stat_tree, axes_labels)
     plt.show()
     return True
 
@@ -112,12 +69,18 @@ def pull_data_from_ESPN(url_info: URLInfo, parsed_json: list):
             request = request.json()
         parsed_json.append(request)
 
-def initialize_tree(team_stat_tree: tl.Tree):
+def format_response_as_tree(league_info: LeagueInfo):
+    response_tree = tl.Tree()
+    initialize_tree(response_tree)
+    translate_parsed_json_to_tree(league_info.cached_json, response_tree)
+    return response_tree
+
+def initialize_tree(response_tree: tl.Tree):
     """ Create team and stat nodes for a new tree. """
-    team_stat_tree.create_node("Teams", "teams")
+    response_tree.create_node("Teams", "teams")
     for team in ESPN_ID_TO_TEAM:
-        team_stat_tree.create_node(ESPN_ID_TO_TEAM.get(team),team, parent='teams')
-        initialize_tree_children(team_stat_tree, team)
+        response_tree.create_node(ESPN_ID_TO_TEAM.get(team),team, parent='teams')
+        initialize_tree_children(response_tree, team)
 
 def initialize_tree_children(tree:tl.Tree, teamNode):
     """ Will create each stat node for the given team in the given tree. """
@@ -133,18 +96,17 @@ def translate_parsed_json_to_tree(parsed_json: list, team_stat_tree: tl.Tree):
             for stat in STATS_IDS:
                 team_stat_tree.get_node(get_team_stat_combo_id(team['id'], stat)).data += team['record']['overall'][str(STATS_IDS.get(stat))]
 
-def is_all_time_record_figure(figure_option) -> bool:
-    """ Returns True if a given figure option is related to All Time Records.
-        Expects either string or int from dictionary FIGURE_OPTIONS.
-    """
-    if figure_option in [FIGURE_OPTIONS.get("All Time Record"), FIGURE_OPTIONS.get("All Time Record - Adjusted (%)")]:
-        return True
-    elif figure_option in [FIGURE_OPTIONS.get(0), FIGURE_OPTIONS.get(1)]:
-        return True
-    else:
-        return False
+def get_axes_labels(figure_option: int) -> AxesLabels:
+    return_labels = AxesLabels()
 
-def tree_adjusted_for_seasons(tree:tl.Tree):
+    if is_all_time_record_figure(figure_option):
+        return_labels.set_all_time_record_labels(figure_option)
+    elif is_all_time_point_figure(figure_option):
+        return_labels.set_all_time_point_labels(figure_option)
+
+    return return_labels
+
+def adjust_tree_for_seasons(tree:tl.Tree):
     """ Expects a tree following structure of those created by initialize_tree.
         Returns the tree with all stat nodes divided by the number of games
         that team has played.
@@ -163,40 +125,47 @@ def total_games(team: int, team_stat_tree:tl.Tree):
                 + team_stat_tree.get_node(get_team_stat_combo_id(team, 1)).data \
                 + team_stat_tree.get_node(get_team_stat_combo_id(team, 2)).data
 
-def is_all_time_point_figure(figure_option) -> bool:
-    """ Returns True if a given figure option is related to All Time Points.
-        Expects either string or int from dictionary FIGURE_OPTIONS.
-    """
-    if figure_option in [FIGURE_OPTIONS.get("All Time Points"), FIGURE_OPTIONS.get("All Time Points - Adjusted (Per Game)")]:
-        return True
-    elif figure_option in [FIGURE_OPTIONS.get(2), FIGURE_OPTIONS.get(3)]:
-        return True
-    else:
-        return False
-
-def prepare_figure(figure_option, team_stat_tree: tl.Tree, labels: list, y_label: str="yLabel"):
+def prepare_figure(figure_option, team_stat_tree: tl.Tree, axes_labels: AxesLabels):
     """ Stating point for preparing bar graph.
     """
-    if figure_option == FIGURE_OPTIONS.get("All Time Points - Adjusted (Per Game)") or figure_option == FIGURE_OPTIONS.get("All Time Points"):
-        tree_type = 1
-    else:
-        tree_type = 0
-    x = np.arange(len(labels))
-    fig, ax = plt.subplots(figsize=(16,6))
-    prepare_figure_bars(
-        tree_to_list_key_team(team_stat_tree, tree_type),
-        labels, team_stat_tree, x, fig, ax, y_label,
+    tree_type = get_tree_type(figure_option)
+    team_stat_tree = tree_to_list_key_team(team_stat_tree, tree_type)
+
+    x = np.arange(len(axes_labels.x_labels))
+    fig, ax = plt.subplots(figsize=(16, 6))
+
+    assign_figure_attributes(
+        axes_labels, x, ax,
         FIGURE_OPTIONS.get(figure_option))
 
-def prepare_figure_bars(list, labels: list, tree: tl.Tree, x, fig, ax, y_label :str="yLabel", title :str="Title", width :float=0.075):
+    prepare_figure_bars(team_stat_tree, x, fig, ax)
+
+def get_tree_type(figure_option: int):
+    if is_all_time_point_figure(figure_option):
+        return 1
+    else:
+        return 0
+
+def assign_figure_attributes(axes_labels: AxesLabels, x, ax, title: str):
+    ax.set_ylabel(axes_labels.y_label)
+    ax.set_title(title)
+    ax.set_xticks(x)
+    ax.set_xticklabels(axes_labels.x_labels)
+
+def prepare_figure_bars(team_stat_tree, x, fig, ax, width: float=0.075):
     """ Generates the actual bars to display in a bar graph.
         Currently hardcoded to appropriately display and space 12 bars.
     """
-    #Create bars per team
-    rects = []
+    rects = generate_bars_per_team(team_stat_tree, x, ax, width)
+    add_bar_labels(ax, rects)
+    ax.legend(fontsize='medium', shadow=True, title='Teams', title_fontsize='large')
+    fig.tight_layout()
+
+def generate_bars_per_team(list: list, x, ax, width: float=0.075):
+    bars = []
     i = width*-6
     for team in ESPN_ID_TO_TEAM:
-        rects.append(
+        bars.append(
             ax.bar(
                 x + i,
                 list[team-1],
@@ -206,15 +175,7 @@ def prepare_figure_bars(list, labels: list, tree: tl.Tree, x, fig, ax, y_label :
                 edgecolor='black')
             )
         i += width
-
-    ax.set_ylabel(y_label)
-    ax.set_title(title)
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.legend(fontsize='medium', shadow=True, title='Teams', title_fontsize='large')
-
-    add_bar_labels(ax, rects)
-    fig.tight_layout()
+    return bars
 
 def add_bar_labels(ax, group_rects: list, vertical_offset: int=3):
     """ Expects a list of responses from ax.bar(), each of which should itself be a list of bars.
@@ -227,7 +188,7 @@ def add_bar_labels(ax, group_rects: list, vertical_offset: int=3):
                 continue
             ax.annotate('{}'.format(height),
                         xy=(rect.get_x() + rect.get_width() / 2, height),
-                        xytext=(0, vertical_offset),  # 3 points vertical offset
+                        xytext=(0, vertical_offset),
                         textcoords="offset points",
                         ha='center', va='bottom')
 
@@ -273,22 +234,6 @@ def get_ESPN_data(url_info: URLInfo) -> list:
         )
     return return_list
 
-def tree_to_list_key_stat(tree: tl.Tree) -> list:
-    """ Given a tree and it's type, returns an equivalent list.
-        This list will be formatted as a list of lists. The index matches the stats
-        index in STATS_IDS and the values are stored as [team1, team2, team3, etc.].
-
-        Type options:   0 - Record
-                        1 - Points
-
-        Example:
-        [[stat1-team1, stat1-team2, stat1-team3], [stat2-team1, stat2-team2, stat2-team3]]
-    """
-    return_list = []
-    for stat in STATS_IDS:
-        return_list.insert(stat, [get_team_stat_combo_id(team, stat) for team in ESPN_ID_TO_TEAM])
-    return return_list
-
 def get_team_stat_combo_tag(team: int, stat: int) -> str:
     """ Returns string to uniquely identify team/stat combination.
         Uses statTag from STATS_TAGS (user-friendly stat names).
@@ -298,6 +243,6 @@ def get_team_stat_combo_tag(team: int, stat: int) -> str:
     return f"{team};{STATS_TAGS.get(stat)}"
 
 if __name__ == "__main__": #For Testing Purposes
-    parsed_json = list()
-    main(parsed_json, 3)
-    main(parsed_json, 1)
+    test_json = list()
+    generate_all_time_graph(test_json, 3)
+    generate_all_time_graph(test_json, 1)
