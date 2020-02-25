@@ -1,6 +1,6 @@
 from tkinter import *
-from tkinter.ttk import *
 from tkinter import messagebox
+from tkinter.ttk import *
 import os
 from ESPN_FFB.all_time_standings import  generate_all_time_graph
 from ESPN_FFB.figure_options import FIGURE_OPTIONS
