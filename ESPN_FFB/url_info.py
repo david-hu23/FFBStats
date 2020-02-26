@@ -1,19 +1,21 @@
 import datetime
 import os
+from multiprocessing import Pool
 from sys import exc_info
+import requests
 from ESPN_FFB.league_info import LeagueInfo
 
 class URLInfo:
 
     def __init__(self, view: str, league_info: LeagueInfo):
-        self.urls = self.get_urls(league_info)
+        self.urls = self._get_urls(league_info)
         self.view = view
 
-        cookies = self.get_cookies()
-        self.SWID = cookies[0].strip()
+        cookies = self._get_cookies()
+        self.swid = cookies[0].strip()
         self.espn_s2 = cookies[1].strip()
 
-    def get_cookies(self) -> list:
+    def _get_cookies(self) -> list:
         current_directory = os.path.dirname(os.path.abspath(__file__))
         cookie_file = os.path.join(current_directory, 'cookies.txt')
         try:
@@ -21,11 +23,10 @@ class URLInfo:
             cookies = open_cookie_file.readlines()
             open_cookie_file.close()
         except:
-            print("Unable to open cookie file.")
-            print(exc_info()[0])
+            raise Exception(f'Unable to open cookie file. Reported error: {exc_info()[0]}')
         return cookies
 
-    def get_urls(self, league_info: LeagueInfo, year: int = datetime.datetime.now().year) -> list:
+    def _get_urls(self, league_info: LeagueInfo, year: int = datetime.datetime.now().year) -> list:
         """ Returns list of URLs for ESPNs fantasy football APIs.
         Will create one URL per year, starting from the passed in year
         until the first season of the league.
@@ -36,17 +37,17 @@ class URLInfo:
         if year < league_info.first_year:
             return urls
 
-        if self.is_year_active(year) is False:
+        if self._is_year_active(year) is False:
             year -= 1
         while year >= league_info.first_year:
             if len(urls) < 2: #Adding this check because 2 years currently use active url
-                urls.append(self.construct_url_current(league_info.league_id, year))
+                urls.append(self._construct_url_current(league_info.league_id, year))
             else:
-                urls.append(self.construct_url_historical(league_info.league_id, year))
+                urls.append(self._construct_url_historical(league_info.league_id, year))
             year -= 1
         return urls
 
-    def is_year_active(self, year: int) -> bool:
+    def _is_year_active(self, year: int) -> bool:
         """ NFL seasons start the weekend after the first Monday of September.
         Reference: https://en.wikipedia.org/wiki/NFL_regular_season
         """
@@ -67,18 +68,47 @@ class URLInfo:
                 return False
         return True
 
-    def construct_url_current(self, league_id: int, seasonId: int) -> str:
+    def _construct_url_current(self, league_id: int, year: int) -> str:
         """
             Constructs "active" URLs for ESPN fantasy football.
             Active URLs appear to be used for the last 2 seasons.
         """
         return "http://fantasy.espn.com/apis/v3/games/ffl/seasons" \
-        f"/{seasonId}/segments/0/leagues/{league_id}"
+        f"/{year}/segments/0/leagues/{league_id}"
 
-    def construct_url_historical(self, league_id: int, seasonId: int) -> str:
+    def _construct_url_historical(self, league_id: int, year: int) -> str:
         """
             Constructs "historical" URLs for ESPN fantasy football.
             Historical URLs appear to be used for seasons more than 2 years back.
         """
         return "https://fantasy.espn.com/apis/v3/games/ffl/leagueHistory" \
-            f"/{league_id}?seasonId={seasonId}"
+            f"/{league_id}?seasonId={year}"
+
+    def get_formatted_espn_data(self):
+        responses, all_requests_successful = self._request_espn_data()
+        parsed_response = list()
+        for response in responses:
+            if 'leagueHistory' in response.url:
+                response = response.json()[0]
+            else:
+                response = response.json()
+            parsed_response.append(response)
+
+        return parsed_response, all_requests_successful
+
+    def _request_espn_data(self):
+        success = True
+        process_pool = Pool()
+        try:
+            responses = process_pool.map(self._get_single_espn_response, self.urls)
+        except requests.exceptions.ConnectionError:
+            success = False
+        return responses, success
+
+    def _get_single_espn_response(self, url: str) -> list:
+        response = requests.get(
+            url,
+            params={"view": self.view},
+            cookies={"SWID": self.swid,
+                     "espn_s2": self.espn_s2})
+        return response
