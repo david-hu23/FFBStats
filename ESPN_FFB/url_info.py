@@ -37,7 +37,7 @@ class URLInfo:
         if year < league_info.first_year:
             return urls
 
-        if self._is_year_active(year) is False:
+        if _is_year_active(year) is False:
             year -= 1
         while year >= league_info.first_year:
             if len(urls) < 2: #Adding this check because 2 years currently use active url
@@ -46,27 +46,6 @@ class URLInfo:
                 urls.append(self._construct_url_historical(league_info.league_id, year))
             year -= 1
         return urls
-
-    def _is_year_active(self, year: int) -> bool:
-        """ NFL seasons start the weekend after the first Monday of September.
-        Reference: https://en.wikipedia.org/wiki/NFL_regular_season
-        """
-        current_date = datetime.date.today()
-        if year < current_date.year:
-            return True
-
-        if current_date.month != 9:
-            if current_date.month < 9:
-                return False
-            else:
-                return True
-        #Check if we've reached the first Monday of September
-        current_day = current_date.day
-        if current_day < 7:
-            current_weekday = current_date.weekday() #Monday == 0
-            if current_day - current_weekday < 0:
-                return False
-        return True
 
     def _construct_url_current(self, league_id: int, year: int) -> str:
         """
@@ -112,3 +91,33 @@ class URLInfo:
             cookies={"SWID": self.swid,
                      "espn_s2": self.espn_s2})
         return response
+
+def _is_year_active(year: int) -> bool:
+    """ NFL seasons start the weekend after the first Monday of September.
+    Reference: https://en.wikipedia.org/wiki/NFL_regular_season
+    """
+    current_date = datetime.date.today()
+    if year < current_date.year:
+        return True
+
+    if current_date.month != 9:
+        if current_date.month < 9:
+            return False
+        else:
+            return True
+
+    return _is_september_date_after_nfl_start(current_date)
+
+def _is_september_date_after_nfl_start(date: datetime.date):
+    day = date.day
+    if day < 13:
+        first_monday = _get_first_september_monday(date.year)
+        if first_monday + 6 > day:
+            return False
+    return True
+
+def _get_first_september_monday(year: int):
+    for day in range(1, 8):
+        date = datetime.date(year, 9, day)
+        if date.weekday() == 0: #Monday == 0
+            return day
